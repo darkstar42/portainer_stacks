@@ -37,7 +37,7 @@ services:
         restart: unless-stopped
 
     webserver:
-        image: ghcr.io/paperless-ngx/paperless-ngx:1.17.1
+        image: ghcr.io/paperless-ngx/paperless-ngx:2.4
         container_name: paperless
         hostname: paperless
         restart: unless-stopped
