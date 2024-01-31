@@ -1,0 +1,73 @@
+version: "3.6"
+services:
+    broker:
+        image: docker.io/library/redis:7
+        container_name: paperless-redis
+        restart: unless-stopped
+        volumes:
+            - /volume1/docker/paperlessngx/redis:/data
+
+    db:
+        image: postgres:16
+        container_name: paperless-db
+        restart: unless-stopped
+        volumes:
+            - /volume1/docker/paperlessngx/db:/var/lib/postgresql/data
+        environment: []
+            # POSTGRES_DB
+            # POSTGRES_USER
+            # POSTGRES_PASSWORD
+    gotenberg:
+        image: docker.io/gotenberg/gotenberg:8
+        container_name: paperless-gotenberg
+        restart: unless-stopped
+
+        # The gotenberg chromium route is used to convert .eml files. We do not
+        # want to allow external content like tracking pixels or even javascript.
+        command:
+        - "gotenberg"
+        - "--chromium-disable-javascript=true"
+        - "--chromium-allow-list=file:///tmp/.*"
+
+    tika:
+        image: ghcr.io/paperless-ngx/tika:2.9.0-full
+        container_name: paperless-tika
+        restart: unless-stopped
+
+    webserver:
+        image: ghcr.io/paperless-ngx/paperless-ngx:2.4
+        container_name: paperless
+        hostname: paperless
+        restart: unless-stopped
+        depends_on:
+            - broker
+            - db
+            - gotenberg
+            - tika
+        ports:
+            - 8777:8000
+        healthcheck:
+            test: ["CMD", "curl", "-fs", "-S", "--max-time", "2", "http://localhost:8000"]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+        volumes:
+            - /volume1/docker/paperlessngx/data:/usr/src/paperless/data
+            - /volume1/docker/paperlessngx/media:/usr/src/paperless/media
+            - /volume1/docker/paperlessngx/export:/usr/src/paperless/export
+            - /volume1/docker/paperlessngx/consume:/usr/src/paperless/consume
+        environment:
+            # PAPERLESS_URL
+            PAPERLESS_REDIS: redis://broker:6379
+            PAPERLESS_TIKA_ENABLED: 1
+            PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+            PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+            PAPERLESS_DBHOST: db
+            PAPERLESS_TIME_ZONE: Europe/Berlin
+            # PAPERLESS_ADMIN_USER
+            # PAPERLESS_ADMIN_PASSWORD
+            # USERMAP_UID
+            # USERMAP_GID
+            PAPERLESS_OCR_LANGUAGE: deu+eng
+            PAPERLESS_OCR_MODE: redo
+            # PAPERLESS_EMAIL_TASK_CRON
