@@ -1,0 +1,163 @@
+version: "3.6"
+services:
+    redis:
+        image: docker.io/library/redis:7
+        container_name: firefly-redis
+        hostname: firefly-redis
+        mem_limit: 256m
+        mem_reservation: 50m
+        cpu_shares: 768
+        security_opt:
+            - no-new-privileges:true
+        read_only: true
+        user: 1032:65540
+        healthcheck:
+            test: ["CMD-SHELL", "redis-cli ping || exit 1"]
+        volumes:
+            - /volume1/docker/firefly/redis:/data:rw
+        environment:
+            TZ: Europe/Berlin
+        restart: on-failure:5
+    db:
+        image: postgres:16
+        container_name: firefly-db
+        hostname: firefly-db
+        mem_limit: 512m
+        mem_reservation: 128m
+        cpu_shares: 768
+        restart: on-failure:5
+        security_opt:
+            - no-new-privileges:true
+        volumes:
+            - /volume1/docker/firefly/db:/var/lib/postgresql/data:rw
+        environment:
+            TZ: Europe/Berlin
+        env_file:
+            - stack.env
+            # POSTGRES_DB
+            # POSTGRES_USER
+            # POSTGRES_PASSWORD
+    backup:
+        image: kartoza/pg-backup:16-3.4
+        container_name: firefly-backup
+        hostname: firefly-backup
+        security_opt:
+            - no-new-privileges:true
+        volumes:
+            - /volume1/docker/firefly/export:/backups:rw
+        depends_on:
+            db:
+                condition: service_started
+        environment:
+            REMOVE_BEFORE: 7
+        env_file:
+            - stack.env
+            # POSTGRES_USER
+            # POSTGRES_PASS
+    importer:
+        image: fireflyiii/data-importer:version-1.4.3
+        container_name: firefly-importer
+        hostname: firefly-importer
+        security_opt:
+            - no-new-privileges:true
+        depends_on:
+            firefly:
+                condition: service_healthy
+        ports:
+            - 6183:8080
+        volumes:
+            - /volume1/docker/firefly/import:/var/www/html/storage/import:rw
+        restart: on-failure:5
+        environment:
+            FIREFLY_III_URL: http://firefly:8080
+            USE_CACHE: false
+            IGNORE_DUPLICATE_ERRORS: false
+            CAN_POST_AUTOIMPORT: true
+            CAN_POST_FILES: true
+            IMPORT_DIR_ALLOWLIST: ''
+            VERIFY_TLS_SECURITY: true
+            CONNECTION_TIMEOUT: '31.41'
+            APP_ENV: local
+            APP_DEBUG: false
+            LOG_CHANNEL: stack
+            LOG_LEVEL: info
+            TRUSTED_PROXIES: '**'
+            TZ: Europe/Berlin
+            ENABLE_MAIL_REPORT: false
+            EXPECT_SECURE_URL: false
+            MAIL_MAILER: log
+            BROADCAST_DRIVER: log
+            CACHE_DRIVER: file
+            QUEUE_CONNECTION: sync
+            SESSION_DRIVER: file
+            SESSION_LIFETIME: 120
+            IS_EXTERNAL: false
+            REDIS_HOST: redis
+            REDIS_PASSWORD: null
+            REDIS_PORT: 6379
+            REDIS_DB: "0"
+            REDIS_CACHE_DB: "1"
+            APP_NAME: DataImporter
+        env_file:
+            - stack.env
+            # VANITY_URL
+            # FIREFLY_III_ACCESS_TOKEN
+            # AUTO_IMPORT_SECRET
+            # NORDIGEN_ID
+            # NORDIGEN_KEY
+    firefly:
+        image: fireflyiii/core:version-6
+        container_name: firefly
+        hostname: firefly
+        mem_limit: 1g
+        cpu_shares: 768
+        security_opt:
+            - no-new-privileges:true
+        healthcheck:
+            test: curl -f http://localhost:8080/ || exit 1
+        volumes:
+            - /volume1/docker/firefly/upload:/var/www/html/storage/upload:rw
+        ports:
+            - 6182:8080
+        restart: on-failure:5
+        depends_on:
+            db:
+                condition: service_started
+            redis:
+                condition: service_healthy
+        environment:
+            APP_ENV: production
+            APP_DEBUG: false
+            DEFAULT_LANGUAGE: en_US
+            DEFAULT_LOCALE: equal
+            TZ: Europe/Berlin
+            LOG_CHANNEL: stack
+            APP_LOG_LEVEL: info
+            AUDIT_LOG_LEVEL: info
+            DB_CONNECTION: pgsql
+            DB_HOST: db
+            DB_PORT: 5432
+            REDIS_SCHEME: tcp
+            REDIS_HOST: redis
+            REDIS_PORT: 6379
+            REDIS_DB: "0"
+            REDIS_CACHE_DB: "1"
+            CACHE_DRIVER: redis
+            SESSION_DRIVER: redis
+            COOKIE_PATH: /
+            COOKIE_DOMAIN: ""
+            COOKIE_SECURE: true
+            COOKIE_SAMESITE: lax
+            MAIL_MAILER: log
+            AUTHENTICATION_GUARD: web
+            AUTHENTICATION_GUARD_HEADER: REMOTE_USER
+            AUTHENTICATION_GUARD_EMAIL: ""
+            TRUSTED_PROXIES: "**"
+        env_file:
+            - stack.env
+            # SITE_OWNER
+            # APP_KEY
+            # DB_DATABASE
+            # DB_USERNAME
+            # DB_PASSWORD
+            # APP_URL
