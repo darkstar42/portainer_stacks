@@ -55,7 +55,7 @@ services:
             # POSTGRES_USER
             # POSTGRES_PASS
     importer:
-        image: fireflyiii/data-importer:version-1.4.3
+        image: fireflyiii/data-importer:version-1.5.2
         container_name: firefly-importer
         hostname: firefly-importer
         security_opt:
